@@ -70,6 +70,64 @@ string maskAccountNumber(const string& accountNumber) {
            accountNumber.substr(accountNumber.length() - 4);
 }
 
+// Input validation helpers (defensive programming)
+void terminateOnEndOfInput() {
+    cout << "\n\n  [!] Input stream closed. Session terminated for security.\n";
+    exit(0);
+}
+
+bool restOfLineIsEmpty() {
+    string rest;
+    getline(cin, rest);
+    for (char ch : rest) {
+        if (!isspace(static_cast<unsigned char>(ch))) return false;
+    }
+    return true;
+}
+
+long long readWholeNumber(const string& prompt) {
+    long long value = 0;
+    while (true) {
+        cout << prompt;
+        cin >> value;
+
+        if (cin.fail()) {
+            if (cin.eof()) terminateOnEndOfInput();
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            cout << "  [!] Invalid input. Please enter numbers only.\n";
+            continue;
+        }
+
+        if (!restOfLineIsEmpty()) {
+            cout << "  [!] Invalid input. Enter a whole number only (no letters, decimals or spaces).\n";
+            continue;
+        }
+        return value;
+    }
+}
+
+bool readYesNo(const string& prompt) {
+    string answer;
+    while (true) {
+        cout << prompt;
+        if (!(cin >> answer)) terminateOnEndOfInput();
+        bool singleWord = restOfLineIsEmpty();
+
+        if (singleWord && (answer == "Y" || answer == "y")) return true;
+        else if (singleWord && (answer == "N" || answer == "n")) return false;
+        else cout << "  [!] Please enter Y or N only.\n";
+    }
+}
+
+bool isFourDigitPin(const string& text) {
+    if (text.length() != 4) return false;
+    for (char ch : text) {
+        if (!isdigit(static_cast<unsigned char>(ch))) return false;
+    }
+    return true;
+}
+
 void displayWelcomeScreen() {
     cout << '\n';
     printLine('*');
@@ -101,23 +159,17 @@ void displayMenu() {
     printLine('-');
 }
 
-bool isFourDigitPin(const string& text) {
-    if (text.length() != 4) return false;
-    for (char ch : text) {
-        if (!isdigit(static_cast<unsigned char>(ch))) return false;
-    }
-    return true;
-}
-
 bool authenticatePin() {
     int attemptsUsed = 0;
     string enteredPin;
 
     while (attemptsUsed < MAX_PIN_ATTEMPTS) {
         cout << "\n  Enter your 4-digit PIN: ";
-        if (!(cin >> enteredPin)) return false;
+        if (!(cin >> enteredPin)) terminateOnEndOfInput();
 
-        if (!isFourDigitPin(enteredPin)) {
+        if (!restOfLineIsEmpty()) {
+            cout << "  [!] PIN must not contain spaces.\n";
+        } else if (!isFourDigitPin(enteredPin)) {
             cout << "  [!] Invalid format. PIN must be exactly 4 digits (0-9).\n";
         } else if (enteredPin == CORRECT_PIN) {
             cout << "  [OK] PIN verified. Welcome, " << ACCOUNT_HOLDER << ".\n";
@@ -128,6 +180,9 @@ bool authenticatePin() {
             if (remaining > 0) {
                 cout << "  [X] Incorrect PIN. " << remaining << " attempt"
                      << (remaining == 1 ? "" : "s") << " remaining.\n";
+                if (remaining == 1) {
+                    cout << "  [!] WARNING: One more wrong PIN will block your card.\n";
+                }
             }
         }
     }
@@ -143,32 +198,63 @@ void showBalance(long long balanceSen, long long withdrawnTodayRM) {
     printRow("Daily Limit Left", formatRM((DAILY_LIMIT_RM - withdrawnTodayRM) * SEN_PER_RM));
 }
 
+void dispenseNotes(long long amountRM) {
+    const int NOTE_VALUES[] = {50, 20, 10};
+    cout << "\n  Dispensing cash, please collect your notes:\n";
+    for (int note : NOTE_VALUES) {
+        long long count = amountRM / note;
+        amountRM = amountRM % note;
+        if (count > 0) {
+            cout << "    RM" << setw(3) << left << note << " x " << count << '\n';
+        }
+    }
+}
+
 void processWithdrawal(long long& balanceSen, long long& withdrawnTodayRM) {
     printHeader("CASH WITHDRAWAL");
-    long long amountRM = 0;
-    cout << "\n  Enter amount to withdraw (RM): ";
-    cin >> amountRM;
+    long long limitLeftRM = DAILY_LIMIT_RM - withdrawnTodayRM;
+    printRow("Available Balance", formatRM(balanceSen));
+    printRow("Daily Limit Left", formatRM(limitLeftRM * SEN_PER_RM));
+    printRow("Notes Available", "RM50, RM20, RM10");
+
+    long long amountRM = readWholeNumber("\n  Enter amount to withdraw (RM): ");
 
     if (amountRM <= 0) {
         cout << "  [X] Amount must be greater than zero.\n";
+    } else if (amountRM < MIN_AMOUNT_RM) {
+        cout << "  [X] Minimum withdrawal is RM" << MIN_AMOUNT_RM << ".\n";
+    } else if (amountRM % NOTE_MULTIPLE_RM != 0) {
+        cout << "  [X] Amount must be in multiples of RM" << NOTE_MULTIPLE_RM << " (notes only).\n";
     } else if (amountRM > balanceSen / SEN_PER_RM) {
-        cout << "  [X] Insufficient funds. Available balance: " << formatRM(balanceSen) << '\n';
+        cout << "  [X] Insufficient funds. Your available balance is " << formatRM(balanceSen) << ".\n";
+    } else if (amountRM > limitLeftRM) {
+        cout << "  [X] Daily withdrawal limit exceeded. You can withdraw up to "
+             << formatRM(limitLeftRM * SEN_PER_RM) << " more today.\n";
     } else {
+        if (!readYesNo("  Confirm withdrawal of " + formatRM(amountRM * SEN_PER_RM) + "? (Y/N): ")) {
+            cout << "  Transaction cancelled. No money was deducted.\n";
+            return;
+        }
         balanceSen -= amountRM * SEN_PER_RM;
         withdrawnTodayRM += amountRM;
-        cout << "  [OK] Withdrawal successful. Please collect your cash.\n";
-        cout << "  Remaining balance: " << formatRM(balanceSen) << '\n';
+        dispenseNotes(amountRM);
+        cout << "\n  [OK] Withdrawal complete. New balance: " << formatRM(balanceSen) << '\n';
     }
 }
 
 void processDeposit(long long& balanceSen) {
     printHeader("CASH DEPOSIT");
-    long long amountRM = 0;
-    cout << "\n  Enter amount to deposit (RM): ";
-    cin >> amountRM;
+    cout << "  Accepted notes: RM10, RM20, RM50, RM100\n"
+         << "  Coins are not accepted.\n";
+
+    long long amountRM = readWholeNumber("\n  Enter amount to deposit (RM): ");
 
     if (amountRM <= 0) {
-        cout << "  [X] Invalid deposit amount.\n";
+        cout << "  [X] Invalid amount. Deposit must be greater than zero.\n";
+    } else if (amountRM % NOTE_MULTIPLE_RM != 0) {
+        cout << "  [X] Amount must be in multiples of RM" << NOTE_MULTIPLE_RM << " (notes only).\n";
+    } else if (amountRM > MAX_DEPOSIT_RM) {
+        cout << "  [X] Maximum deposit per transaction is " << formatRM(MAX_DEPOSIT_RM * SEN_PER_RM) << ".\n";
     } else {
         balanceSen += amountRM * SEN_PER_RM;
         cout << "  [OK] Deposit successful. New balance: " << formatRM(balanceSen) << '\n';
@@ -187,12 +273,9 @@ int main() {
     }
 
     bool sessionActive = true;
-    int choice = 0;
-
     do {
         displayMenu();
-        cout << "  Select an option (1-5): ";
-        cin >> choice;
+        long long choice = readWholeNumber("  Select an option (1-5): ");
 
         switch (choice) {
             case 1:
@@ -205,7 +288,6 @@ int main() {
                 processDeposit(balanceSen);
                 break;
             case 4:
-                cout << "\n  Exiting session. Thank you for using our ATM.\n";
                 sessionActive = false;
                 break;
             case 5:
@@ -217,14 +299,10 @@ int main() {
         }
 
         if (sessionActive) {
-            char cont;
-            cout << "\n  Perform another transaction? (Y/N): ";
-            cin >> cont;
-            if (cont == 'N' || cont == 'n') {
-                sessionActive = false;
-            }
+            sessionActive = readYesNo("\n  Perform another transaction? (Y/N): ");
         }
     } while (sessionActive);
 
+    cout << "\n  Please take your card. Goodbye!\n";
     return 0;
 }
