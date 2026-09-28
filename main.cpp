@@ -39,6 +39,31 @@ void printHeader(const string& title) {
     printLine('=');
 }
 
+void printRow(const string& label, const string& value) {
+    cout << "  " << left << setw(22) << label << ": " << value << '\n';
+}
+
+string formatRM(long long sen) {
+    bool isNegative = sen < 0;
+    if (isNegative) sen = -sen;
+    long long ringgit = sen / SEN_PER_RM;
+    long long cents   = sen % SEN_PER_RM;
+
+    string digits = to_string(ringgit);
+    string withCommas;
+    int digitCount = 0;
+    for (int i = static_cast<int>(digits.length()) - 1; i >= 0; --i) {
+        withCommas.insert(withCommas.begin(), digits[i]);
+        digitCount++;
+        if (digitCount % 3 == 0 && i > 0) {
+            withCommas.insert(withCommas.begin(), ',');
+        }
+    }
+
+    string centsText = (cents < 10 ? "0" : "") + to_string(cents);
+    return string(isNegative ? "-" : "") + "RM " + withCommas + "." + centsText;
+}
+
 string maskAccountNumber(const string& accountNumber) {
     if (accountNumber.length() <= 4) return accountNumber;
     return string(accountNumber.length() - 4, '*') +
@@ -109,7 +134,51 @@ bool authenticatePin() {
     return false;
 }
 
+void showBalance(long long balanceSen, long long withdrawnTodayRM) {
+    printHeader("BALANCE INQUIRY");
+    printRow("Account Holder", ACCOUNT_HOLDER);
+    printRow("Account Number", maskAccountNumber(ACCOUNT_NUMBER));
+    printRow("Available Balance", formatRM(balanceSen));
+    printRow("Withdrawn Today", formatRM(withdrawnTodayRM * SEN_PER_RM));
+    printRow("Daily Limit Left", formatRM((DAILY_LIMIT_RM - withdrawnTodayRM) * SEN_PER_RM));
+}
+
+void processWithdrawal(long long& balanceSen, long long& withdrawnTodayRM) {
+    printHeader("CASH WITHDRAWAL");
+    long long amountRM = 0;
+    cout << "\n  Enter amount to withdraw (RM): ";
+    cin >> amountRM;
+
+    if (amountRM <= 0) {
+        cout << "  [X] Amount must be greater than zero.\n";
+    } else if (amountRM > balanceSen / SEN_PER_RM) {
+        cout << "  [X] Insufficient funds. Available balance: " << formatRM(balanceSen) << '\n';
+    } else {
+        balanceSen -= amountRM * SEN_PER_RM;
+        withdrawnTodayRM += amountRM;
+        cout << "  [OK] Withdrawal successful. Please collect your cash.\n";
+        cout << "  Remaining balance: " << formatRM(balanceSen) << '\n';
+    }
+}
+
+void processDeposit(long long& balanceSen) {
+    printHeader("CASH DEPOSIT");
+    long long amountRM = 0;
+    cout << "\n  Enter amount to deposit (RM): ";
+    cin >> amountRM;
+
+    if (amountRM <= 0) {
+        cout << "  [X] Invalid deposit amount.\n";
+    } else {
+        balanceSen += amountRM * SEN_PER_RM;
+        cout << "  [OK] Deposit successful. New balance: " << formatRM(balanceSen) << '\n';
+    }
+}
+
 int main() {
+    long long balanceSen       = OPENING_BALANCE_SEN;
+    long long withdrawnTodayRM = 0;
+
     displayWelcomeScreen();
 
     if (!authenticatePin()) {
@@ -127,20 +196,20 @@ int main() {
 
         switch (choice) {
             case 1:
-                cout << "\n  [Stub] Processing Balance Inquiry...\n";
+                showBalance(balanceSen, withdrawnTodayRM);
                 break;
             case 2:
-                cout << "\n  [Stub] Processing Cash Withdrawal...\n";
+                processWithdrawal(balanceSen, withdrawnTodayRM);
                 break;
             case 3:
-                cout << "\n  [Stub] Processing Cash Deposit...\n";
+                processDeposit(balanceSen);
                 break;
             case 4:
                 cout << "\n  Exiting session. Thank you for using our ATM.\n";
                 sessionActive = false;
                 break;
             case 5:
-                cout << "\n  [Stub] Displaying About ATM Technology...\n";
+                cout << "\n  [Stub] Historical overview of ATM innovation.\n";
                 break;
             default:
                 cout << "  [!] Invalid option. Please choose a number from 1 to 5.\n";
