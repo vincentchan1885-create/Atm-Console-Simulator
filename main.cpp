@@ -66,6 +66,16 @@ void displayCardBlocked() {
     printLine('=');
 }
 
+void displayMenu() {
+    printHeader("MAIN MENU");
+    cout << "  [1] Balance Inquiry\n"
+         << "  [2] Cash Withdrawal\n"
+         << "  [3] Cash Deposit\n"
+         << "  [4] Exit & Return Card\n"
+         << "  [5] About ATM Technology\n";
+    printLine('-');
+}
+
 bool isFourDigitPin(const string& text) {
     if (text.length() != 4) return false;
     for (char ch : text) {
@@ -107,6 +117,45 @@ int main() {
         return 0;
     }
 
-    cout << "\nAccess granted. Ready for transaction menu.\n";
+    bool sessionActive = true;
+    int choice = 0;
+
+    do {
+        displayMenu();
+        cout << "  Select an option (1-5): ";
+        cin >> choice;
+
+        switch (choice) {
+            case 1:
+                cout << "\n  [Stub] Processing Balance Inquiry...\n";
+                break;
+            case 2:
+                cout << "\n  [Stub] Processing Cash Withdrawal...\n";
+                break;
+            case 3:
+                cout << "\n  [Stub] Processing Cash Deposit...\n";
+                break;
+            case 4:
+                cout << "\n  Exiting session. Thank you for using our ATM.\n";
+                sessionActive = false;
+                break;
+            case 5:
+                cout << "\n  [Stub] Displaying About ATM Technology...\n";
+                break;
+            default:
+                cout << "  [!] Invalid option. Please choose a number from 1 to 5.\n";
+                continue;
+        }
+
+        if (sessionActive) {
+            char cont;
+            cout << "\n  Perform another transaction? (Y/N): ";
+            cin >> cont;
+            if (cont == 'N' || cont == 'n') {
+                sessionActive = false;
+            }
+        }
+    } while (sessionActive);
+
     return 0;
 }
